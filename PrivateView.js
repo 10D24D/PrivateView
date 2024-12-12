@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         PrivateView
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
-// @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex等常用网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
+// @version      1.0.2
+// @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
 // @author       DD1024z
 // @namespace    https://github.com/10D24D/PrivateView/
 // @supportURL   https://github.com/10D24D/PrivateView/
@@ -13,6 +13,8 @@
 // @match        *://*.bilibili.com/*
 // @license      Apache License 2.0
 // @grant        GM_registerMenuCommand
+// @downloadURL https://update.greasyfork.org/scripts/520416/PrivateView.user.js
+// @updateURL https://update.greasyfork.org/scripts/520416/PrivateView.meta.js
 // ==/UserScript==
 
 (function () {
@@ -28,8 +30,9 @@
     const siteConfig = {
         'v2ex.com': {
             "BrowserTitle": "V2EX",
-            "ProfileImg": "#Rightbar .cell a img.avatar",
+            "ProfileImg": "#Rightbar > div.box:nth-of-type(2) .cell a img.avatar",
             "ProfileUserName": "#Top .tools a[href^='/member/'], #Rightbar .cell span.bigger a",
+            "ProfileStatistics": "#Rightbar .box a[href^='/my/nodes'] span.bigger, #Rightbar .box a[href^='/my/topics'] span.bigger, #Rightbar .box a[href^='/my/following'] span.bigger, #money a",
         },
         'linux.do': {
             "BrowserTitle": "LINUX DO",
@@ -56,7 +59,7 @@
         }
     };
 
-    const IMG_SRC = "error"; // 隐匿图像资源后替换的内容
+    const IMG_SRC = ""; // 隐匿图像资源后替换的内容
     const IMG_ALT = ""; // 隐匿图像提示内容后替换的内容
     const USER_NAME = "User"; // 隐匿用户名称后显示的内容
     const USER_STATISTICS = "?"; // 隐匿用户统计数据后显示的内容
@@ -163,7 +166,7 @@
     }
 
     // 注册菜单开关
-    GM_registerMenuCommand(settings.hiddenModeEnabled ? "🌐一键关闭隐匿视图" : "🌐一键开启隐匿视图", () => toggleSetting('hiddenModeEnabled'));
+    GM_registerMenuCommand(settings.hiddenModeEnabled ? "🌐一键关闭隐匿浏览" : "🌐一键开启隐匿浏览", () => toggleSetting('hiddenModeEnabled'));
     GM_registerMenuCommand(settings.hideBrowserTitle ? "🔖隐匿浏览器标签✅" : "🔖隐匿浏览器标签❌", () => toggleSetting('hideBrowserTitle'));
     GM_registerMenuCommand(settings.hideProfileInfo ? "👤隐匿个人信息✅" : "👤隐匿个人信息❌", () => toggleSetting('hideProfileInfo'));
     GM_registerMenuCommand(settings.hideArticleTitle ? "📰隐匿文章标题✅" : "📰隐匿文章标题❌", () => toggleSetting('hideArticleTitle'));
