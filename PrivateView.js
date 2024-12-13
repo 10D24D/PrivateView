@@ -155,7 +155,6 @@
             el.src = IMG_SRC;
             el.srcset = IMG_SRC;
             el.alt = IMG_ALT;
-            //el.style.cssText = `border: 1px solid #e8e8ed !important;`; // 移除图像边框，保持原网站样式，防止占位
         });
     }
 
@@ -302,9 +301,6 @@
             () => toggleSetting('hideProfileStatistics')
         );
     }
-
-    // 注册菜单开关
-    updateMenuCommands();
 
     // 注册菜单开关
     updateMenuCommands();
