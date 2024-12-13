@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PrivateView
 // @namespace    http://tampermonkey.net/
-// @version      1.0.3
+// @version      1.0.4
 // @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
 // @author       DD1024z
 // @namespace    https://github.com/10D24D/PrivateView/
@@ -13,8 +13,9 @@
 // @match        *://*.bilibili.com/*
 // @license      Apache License 2.0
 // @grant        GM_registerMenuCommand
+// @grant        GM_unregisterMenuCommand
 // @downloadURL https://update.greasyfork.org/scripts/520416/PrivateView.user.js
-// @updateURL https://update.greasyfork.org/scripts/520416/PrivateView.meta.js
+// @updateURL https://raw.githubusercontent.com/10D24D/PrivateView/refs/heads/main/PrivateView.js
 // ==/UserScript==
 
 (function () {
@@ -23,9 +24,9 @@
     // 网站配置
     // BrowserTitle 浏览器标题
     // ProfileImg 用户头像的样式。多个样式使用, 逗号隔开
-    // ProfileUserName 用户名称的样式
-    // ArticleTitle 文章标题的样式
-    // ProfileStatistics 用户统计数据的样式
+    // ProfileUserName 用户名称的元素
+    // ArticleTitle 文章标题的元素
+    // ProfileStatistics 用户统计数据的元素
     const siteConfig = {
         'v2ex.com': {
             "BrowserTitle": "V2EX",
@@ -86,13 +87,52 @@
     // 切换功能开关
     function toggleSetting(settingKey) {
         settings[settingKey] = !settings[settingKey];
+
         if (settingKey === "hiddenModeEnabled") {
             settings.hideBrowserTitle = settings.hideProfileInfo = settings.hideArticleTitle = settings.hiddenModeEnabled;
         } else {
             settings.hiddenModeEnabled = settings.hideBrowserTitle || settings.hideProfileInfo || settings.hideArticleTitle;
         }
+
         saveSettings();
-        location.reload();
+
+        if (settingKey === "hideBrowserTitle") {
+            toggleBrowserTitle(); // 切换页面标题
+        } else if (settingKey === "hideArticleTitle") {
+            toggleArticleTitleVisibility(); // 切换文章标题显示/隐藏
+        } else {
+            location.reload(); // 其他设置仍刷新页面
+        }
+
+        updateMenuCommands(); // 动态更新菜单名称
+    }
+
+    let originalTitle = document.title; // 记录原始页面标题
+
+    // 切换页面标题
+    function toggleBrowserTitle() {
+        if (settings.hideBrowserTitle) {
+            const currentSite = siteConfig[currentHostname];
+            if (currentSite && currentSite.BrowserTitle) {
+                document.title = currentSite.BrowserTitle; // 设置为指定标题
+            }
+        } else {
+            document.title = originalTitle; // 恢复原始标题
+        }
+    }
+
+    // 切换文章标题显示/隐藏
+    function toggleArticleTitleVisibility() {
+        const currentSite = siteConfig[currentHostname];
+        if (!currentSite || !currentSite.ArticleTitle) return;
+
+        const visibility = settings.hideArticleTitle ? "hidden" : "visible";
+
+        document.querySelectorAll(currentSite.ArticleTitle).forEach(el => {
+            el.style.visibility = visibility;
+            el.style.opacity = settings.hideArticleTitle ? "0" : "1";
+            el.style.pointerEvents = settings.hideArticleTitle ? "none" : "auto";
+        });
     }
 
     // 隐藏个人信息的函数
@@ -147,7 +187,7 @@
             el.src = IMG_SRC;
             el.srcset = IMG_SRC;
             el.alt = IMG_ALT;
-            el.style.cssText = `border: 1px solid #e8e8ed !important; border-radius: 50% !important;`;
+            el.style.cssText = `border: 1px solid #e8e8ed !important;`;
         });
     }
 
@@ -158,11 +198,40 @@
         });
     }
 
+    // 存储菜单项的引用
+    let menuItems = {};
+
+    function updateMenuCommands() {
+        // 如果菜单项已经存在，先移除旧菜单
+        if (menuItems.hiddenModeEnabled) GM_unregisterMenuCommand(menuItems.hiddenModeEnabled);
+        if (menuItems.hideBrowserTitle) GM_unregisterMenuCommand(menuItems.hideBrowserTitle);
+        if (menuItems.hideProfileInfo) GM_unregisterMenuCommand(menuItems.hideProfileInfo);
+        if (menuItems.hideArticleTitle) GM_unregisterMenuCommand(menuItems.hideArticleTitle);
+
+        // 重新注册菜单
+        menuItems.hiddenModeEnabled = GM_registerMenuCommand(
+            settings.hiddenModeEnabled ? "🌐一键关闭隐匿浏览" : "🌐一键开启隐匿浏览",
+            () => toggleSetting('hiddenModeEnabled')
+        );
+
+        menuItems.hideBrowserTitle = GM_registerMenuCommand(
+            settings.hideBrowserTitle ? "🔖隐匿浏览器标签✅" : "🔖隐匿浏览器标签❌",
+            () => toggleSetting('hideBrowserTitle')
+        );
+
+        menuItems.hideProfileInfo = GM_registerMenuCommand(
+            settings.hideProfileInfo ? "👤隐匿个人信息✅" : "👤隐匿个人信息❌",
+            () => toggleSetting('hideProfileInfo')
+        );
+
+        menuItems.hideArticleTitle = GM_registerMenuCommand(
+            settings.hideArticleTitle ? "📰隐匿文章标题✅" : "📰隐匿文章标题❌",
+            () => toggleSetting('hideArticleTitle')
+        );
+    }
+
     // 注册菜单开关
-    GM_registerMenuCommand(settings.hiddenModeEnabled ? "🌐一键关闭隐匿浏览" : "🌐一键开启隐匿浏览", () => toggleSetting('hiddenModeEnabled'));
-    GM_registerMenuCommand(settings.hideBrowserTitle ? "🔖隐匿浏览器标签✅" : "🔖隐匿浏览器标签❌", () => toggleSetting('hideBrowserTitle'));
-    GM_registerMenuCommand(settings.hideProfileInfo ? "👤隐匿个人信息✅" : "👤隐匿个人信息❌", () => toggleSetting('hideProfileInfo'));
-    GM_registerMenuCommand(settings.hideArticleTitle ? "📰隐匿文章标题✅" : "📰隐匿文章标题❌", () => toggleSetting('hideArticleTitle'));
+    updateMenuCommands();
 
     // 页面变化时重新执行
     const observer = new MutationObserver(() => {
