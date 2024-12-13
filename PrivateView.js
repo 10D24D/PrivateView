@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PrivateView
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.3
 // @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
 // @author       DD1024z
 // @namespace    https://github.com/10D24D/PrivateView/
@@ -26,7 +26,6 @@
     // ProfileUserName 用户名称的样式
     // ArticleTitle 文章标题的样式
     // ProfileStatistics 用户统计数据的样式
-    // ProfileAvatarShow 是否显示用户头像
     const siteConfig = {
         'v2ex.com': {
             "BrowserTitle": "V2EX",
@@ -52,14 +51,13 @@
         },
         'bilibili.com': {
             "BrowserTitle": "Bilibili",
-            "ProfileImg": "li.header-avatar-wrap .bili-avatar img.bili-avatar-img, li.header-avatar-wrap .bili-avatar-img, li.header-avatar-wrap picture img, li.header-avatar-wrap picture source",
+            "ProfileImg": "li.header-avatar-wrap img.bili-avatar-img, a.header-entry-mini picture img, a.header-entry-mini source",
             "ProfileUserName": "div.v-popover-content a.nickname-item",
             "ProfileStatistics": ".counts-item .count-num, div.coins-item span.coin-item__num",
-            "ProfileAvatarShow": false, // 防止播放视频时头像一直闪烁
         }
     };
 
-    const IMG_SRC = ""; // 隐匿图像资源后替换的内容
+    const IMG_SRC = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="; // 隐匿图像资源后替换的内容。空白图片
     const IMG_ALT = ""; // 隐匿图像提示内容后替换的内容
     const USER_NAME = "User"; // 隐匿用户名称后显示的内容
     const USER_STATISTICS = "?"; // 隐匿用户统计数据后显示的内容
@@ -70,14 +68,12 @@
         hideBrowserTitle: true,
         hideProfileInfo: true,
         hideArticleTitle: true,
-        hideProfileAvatar: false,
     };
 
     const currentHostname = Object.keys(siteConfig).find(host => location.hostname.includes(host));
     const currentSite = siteConfig[currentHostname];
 
-    if (!localStorage.getItem('PrivateViewSettings') && currentSite && currentSite.ProfileAvatarShow !== undefined) {
-        settings.hideProfileAvatar = !currentSite.ProfileAvatarShow;
+    if (!localStorage.getItem('PrivateViewSettings') && currentSite) {
         saveSettings();
         location.reload();
     }
@@ -103,12 +99,8 @@
     function hideElements() {
         if (!currentSite) return;
 
-        if (settings.hideProfileAvatar && currentSite.ProfileImg) {
-            updateVisibility(currentSite.ProfileImg);
-        }
-
         if (settings.hideProfileInfo) {
-            if (currentSite.ProfileImg && !settings.hideProfileAvatar) {
+            if (currentSite.ProfileImg) {
                 updateImg(currentSite.ProfileImg);
             }
 
@@ -155,6 +147,7 @@
             el.src = IMG_SRC;
             el.srcset = IMG_SRC;
             el.alt = IMG_ALT;
+            el.style.cssText = `border: 1px solid #e8e8ed !important; border-radius: 50% !important;`;
         });
     }
 
@@ -170,7 +163,6 @@
     GM_registerMenuCommand(settings.hideBrowserTitle ? "🔖隐匿浏览器标签✅" : "🔖隐匿浏览器标签❌", () => toggleSetting('hideBrowserTitle'));
     GM_registerMenuCommand(settings.hideProfileInfo ? "👤隐匿个人信息✅" : "👤隐匿个人信息❌", () => toggleSetting('hideProfileInfo'));
     GM_registerMenuCommand(settings.hideArticleTitle ? "📰隐匿文章标题✅" : "📰隐匿文章标题❌", () => toggleSetting('hideArticleTitle'));
-    GM_registerMenuCommand(settings.hideProfileAvatar ? "🖼️隐藏头像✅" : "🖼️隐藏头像❌", () => toggleSetting('hideProfileAvatar'));
 
     // 页面变化时重新执行
     const observer = new MutationObserver(() => {
