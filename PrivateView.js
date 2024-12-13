@@ -82,7 +82,7 @@
         },
         'bilibili.com': {
             "BrowserTitle": "Bilibili",
-            "ProfileImg": "li.header-avatar-wrap img.bili-avatar-img, a.header-entry-mini picture img, a.header-entry-mini source",
+            "ProfileImg": "li.header-avatar-wrap a.header-entry-avatar img, li.header-avatar-wrap a.header-entry-mini picture source",
             "ProfileUserName": "div.v-popover-content a.nickname-item",
             "ProfileStatistics": ".counts-item .count-num, div.coins-item span.coin-item__num",
         },
