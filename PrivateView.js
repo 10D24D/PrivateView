@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PrivateView
 // @namespace    http://tampermonkey.net/
-// @version      1.0.6
+// @version      1.0.7
 // @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
 // @author       DD1024z
 // @namespace    https://github.com/10D24D/PrivateView/
@@ -155,7 +155,7 @@
             el.src = IMG_SRC;
             el.srcset = IMG_SRC;
             el.alt = IMG_ALT;
-            el.style.cssText = `border: 1px solid #e8e8ed !important;`;
+            //el.style.cssText = `border: 1px solid #e8e8ed !important;`; // 移除图像边框，保持原网站样式，防止占位
         });
     }
 
