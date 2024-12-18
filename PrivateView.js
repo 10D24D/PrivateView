@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PrivateView
 // @namespace    http://tampermonkey.net/
-// @version      1.0.7
+// @version      1.0.8
 // @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
 // @author       DD1024z
 // @namespace    https://github.com/10D24D/PrivateView/
@@ -18,11 +18,17 @@
 // @match        *://*.jianshu.com/*
 // @match        *://*.leetcode.cn/*
 // @match        *://*.juejin.cn/*
+// @match        *://*.52pojie.cn/*
+// @match        *://*.itsk.com/*
+// @match        *://*.hifini.com/*
+// @match        *://*.oschina.net/*
+// @match        *://*.51cto.com/*
+// @match        *://app.follow.is/*
 // @license      Apache License 2.0
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
-// @downloadURL  https://update.greasyfork.org/scripts/520416/PrivateView.user.js
-// @updateURL    https://update.greasyfork.org/scripts/520416/PrivateView.meta.js
+// @downloadURL https://update.greasyfork.org/scripts/520416/PrivateView.user.js
+// @updateURL https://update.greasyfork.org/scripts/520416/PrivateView.meta.js
 // ==/UserScript==
 
 (function () {
@@ -67,7 +73,7 @@
         'linux.do': {
             "BrowserTitle": "LINUX DO",
             "ProfileImg": "#current-user img.avatar",
-            "ArticleTitle": ".topic-link",
+            "ArticleTitle": "div.title-wrapper",
         },
         'zhihu.com': {
             "BrowserTitle": "知乎",
@@ -88,21 +94,56 @@
         },
         'jianshu.com': {
             "BrowserTitle": "简书",
-            "ProfileImg": "div.user a.avatar img[src^='https://cdn2.jianshu.io/assets/default_avatar']",
+            "ProfileImg": "div.user a[href^='/u/'].avatar img",
             "ArticleTitle": "h1[title^='简书']",
         },
         'leetcode.cn': {
             "BrowserTitle": "力扣",
             "ProfileImg": "#navbar_user_avatar img, #web-user-menu a[href^='/u/'] img.object-cover",
             "ProfileUserName": "#web-user-menu div.pl-3 a[href^='/u/']",
-            "ProfileStatistics": "a[href^='/problems/'] > svg + span, section div.text-center p span",
+            "ProfileStatistics": "a[href^='/problems/'] > svg + span, section div.text-center p span, #headlessui-popover-button-:r1: a span.text-brand-orange",
         },
         'juejin.cn': {
             "BrowserTitle": "掘金",
             "ProfileImg": "ul.right-side-nav li.menu .avatar img, div.user-info div.avatar img",
             "ProfileUserName": "div.user-detail a.username",
-            "ProfileStatistics": "ul.actions-count-list div.item-count, div.user-detail a.ore span",
-        }
+            "ProfileStatistics": "ul.actions-count-list div.item-count, div.user-detail a.ore span, a.progress-bar div.jscore-level span, a.progress-bar div.progress span",
+        },
+        '52pojie.cn': {
+            "BrowserTitle": "吾爱破解",
+            "ProfileImg": "#um a[href^='home.php?mod=space&uid='] img",
+            "ProfileUserName": "a[href^='home.php?mod=space&uid=']",
+            "ProfileStatistics": "#extcreditmenu_menu li span",
+        },
+        'itsk.com': {
+            "BrowserTitle": "IT天空",
+            "ProfileImg": "div.navbar-container a[href^='/space/'].avatar-box img",
+            "ProfileUserName": "#el-popper-container-1024 span.user-name",
+        },
+        'hifini.com': {
+            "BrowserTitle": "HiFiNi",
+            "ProfileImg": "li.nav-item.username a.nav-link img.avatar-1",
+            "ProfileUserName": "li.nav-item.username a.nav-link",
+        },
+        'oschina.net': {
+            "BrowserTitle": "OSCHINA",
+            "ProfileImg": "div.current-user-avatar img",
+            "ProfileUserName": "#userSidebar h3.centered.header",
+            "ProfileStatistics": "#userSidebar a.statistic div.value",
+        },
+        '51cto.com': {
+            "BrowserTitle": "51CTO技术家园",
+            "ProfileImg": "div.item-rt.loginbox img, div.mainindex_r.right a.position_r img",
+            "ProfileUserName": "div.mainindex_r.right div.port_m_box.position_r a[href^='/space?uid=']",
+            "ProfileStatistics": "div.mainindex_r.right div.datas.clearfix a span",
+        },
+        'app.follow.is': {
+            "BrowserTitle": "Follow",
+            "ArticleTitle": "main div.items-end.text-theme-foreground",
+            "ProfileImg": "img:not(main img)",
+            "ProfileUserName": "[id^='radix-'] span.block.mx-auto",
+            "ProfileStatistics": "div.text-theme-vibrancyFg button div, div.items-center span.tabular-nums span, div.items-center span.tabular-nums, div.items-center i.i-mgc-fire-cute-fi + span",
+        },
     };
 
     const IMG_SRC = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="; // 隐匿图像资源后替换的内容。空白图片
@@ -138,12 +179,12 @@
 
     // 修改文本内容
     function updateTextContent(selector, value) {
-        document.querySelectorAll(selector).forEach(el => {
-            // 遍历所有子节点
+        const elements = document.querySelectorAll(selector);
+        if (!elements.length) return; // 无匹配时直接返回
+        elements.forEach(el => {
             Array.from(el.childNodes).forEach(child => {
-                // 判断子节点是否是文本节点
                 if (child.nodeType === Node.TEXT_NODE) {
-                    child.nodeValue = value; // 只修改文本节点的内容
+                    child.nodeValue = value;
                 }
             });
         });
@@ -155,6 +196,7 @@
             el.src = IMG_SRC;
             el.srcset = IMG_SRC;
             el.alt = IMG_ALT;
+            //el.style.cssText = `border: 1px solid #e8e8ed !important;`; // 移除图像边框，保持原网站样式，防止占位
         });
     }
 
@@ -315,6 +357,11 @@
     // 检测页面变动
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // 初始化页面内容
-    hideElements();
+    // 初始化页面时内容
+    if (settings.hiddenModeEnabled) {
+        setTimeout(() => {
+            hideElements();
+        }, 100);
+    }
+
 })();
