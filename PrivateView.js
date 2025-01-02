@@ -1,12 +1,21 @@
 // ==UserScript==
 // @name         PrivateView
 // @namespace    http://tampermonkey.net/
-// @version      1.0.8
+// @version      1.1.0
 // @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
 // @author       DD1024z
 // @namespace    https://github.com/10D24D/PrivateView/
 // @supportURL   https://github.com/10D24D/PrivateView/
-// @match        *://*.baidu.com/*
+// @match        *://www.baidu.com/*
+// @match        *://chat.baidu.com/*
+// @match        *://image.baidu.com/*
+// @match        *://tieba.baidu.com/*
+// @match        *://wenku.baidu.com/*
+// @match        *://fanyi.baidu.com/*
+// @match        *://baike.baidu.com/*
+// @match        *://xueshu.baidu.com/*
+// @match        *://jingyan.baidu.com/*
+// @match        *://zhidao.baidu.com/*
 // @match        *://*.so.com/*
 // @match        *://*.bing.com/*
 // @match        *://*.google.com/*
@@ -24,6 +33,8 @@
 // @match        *://*.oschina.net/*
 // @match        *://*.51cto.com/*
 // @match        *://app.follow.is/*
+// @match        *://*.gitee.com/*
+// @match        *://*.github.com/*
 // @license      Apache License 2.0
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
@@ -42,11 +53,65 @@
     // ProfileUserName 用户名称的元素
     // ArticleTitle 文章标题的元素
     // ProfileStatistics 用户统计数据的元素
+    // CustomStatistics 自定义替换匹已匹配统计数据的元素
     const siteConfig = {
-        'baidu.com': {
+        'www.baidu.com': {
             "BrowserTitle": "百度",
-            "ProfileImg": "span.s-top-img-wrapper img",
-            "ProfileUserName": "#s-top-username span.user-name,#u span.s-top-username",
+            "ProfileImg": "#s-top-username span.s-top-img-wrapper img, a.username span[class$='top-img-wrapper'] img",
+            "ProfileUserName": "#s-top-username span.user-name, a.username span[class$='top-username']",
+        },
+        'chat.baidu.com': {
+            "BrowserTitle": "百度AI助手",
+            "ProfileImg": "div.user-info img.cos-avatar-img",
+            "ProfileUserName": "div.user-info span.cos-line-clamp-1",
+        },
+        'image.baidu.com': {
+            "BrowserTitle": "百度图片",
+            "ProfileImg": "#username_info span.s-top-img-wrapper img",
+            "ProfileUserName": "#username_info span.s-top-username",
+        },
+        'tieba.baidu.com': {
+            "BrowserTitle": "百度贴吧",
+            "ProfileImg": "#user_info img.head_img",
+            "ProfileUserName": "#j_u_username a.u_username_wrap span.u_username_title, #user_info div.user_name a",
+            "ProfileStatistics": "div.user_score a.score_num",
+        },
+        'wenku.baidu.com': {
+            "BrowserTitle": "百度文库",
+            "ProfileImg": "div.user-icon-content.login div.user-icon",
+        },
+        'fanyi.baidu.com': {
+            "BrowserTitle": "百度翻译",
+            "ProfileImg": "img[src^='http://himg.bdimg.com/sys/portrait/item/']",
+            "ProfileUserName": "#root > div > div > div:nth-child(4) > div:nth-child(2)"
+        },
+        'baike.baidu.com': {
+            "BrowserTitle": "百度百科",
+            "ProfileImg": "#user_info img.head_img",
+            "ProfileUserName": `
+                div.user-bar.user-login > div:nth-child(2) a:first-of-type:not([href]):not([aria-label]):has(i),
+                div.fadeIn a[href^='/usercenter']
+            `
+        },
+        'xueshu.baidu.com': {
+            "BrowserTitle": "百度学术",
+            "ProfileUserName": "#userName, #fixed_user a.username"
+        },
+        'jingyan.baidu.com': {
+            "BrowserTitle": "百度经验",
+            "ProfileImg": "li.my-info div.user-avatar img, #wgt-user-info img.avatar-img",
+            "ProfileUserName": "li.my-info span.user-name, #wgt-user-info p.u-name",
+            "ProfileStatistics": "#activeDays, #wgt-user-info span.level",
+        },
+        'zhidao.baidu.com': {
+            "BrowserTitle": "百度知道",
+            "ProfileImg": "#user-name span.avatar-container img, div.login-slogan img.avatar-image",
+            "ProfileUserName": "#user-name span.user-name-span, div.login-slogan a.user-name-link",
+            "ProfileStatistics": "div.answer-question-section span.item-num",
+            "CustomStatistics": {
+                "div.user-grade": /LV[0-9]+/,
+                "div.help-people-count": /已经帮助了\d+人/
+            }
         },
         'so.com': {
             "BrowserTitle": "360搜索",
@@ -54,15 +119,14 @@
         },
         'bing.com': {
             "BrowserTitle": "必应",
-            "ProfileImg": "#id_p",
-            "ProfileUserName": "#id_n",
+            "ProfileImg": "#id_p, #id_accountp",
+            "ProfileUserName": "#id_n, #id_l, #id_currentAccount_primary, #id_currentAccount_secondary",
             "ProfileStatistics": "#id_rfb, span.points-container",
         },
         'google.com': {
             "BrowserTitle": "Google",
             "ProfileImg": "#gb a.gb_A img.gb_O, div.XS2qof img",
             "ProfileUserName": "div.gb_Ac div.gb_g, div.gb_Ac div.gb_g + div, div.eYSAde, div.hCDve",
-            "ProfileStatistics": "#id_rfb, span.points-container",
         },
         'v2ex.com': {
             "BrowserTitle": "V2EX",
@@ -77,7 +141,7 @@
         },
         'zhihu.com': {
             "BrowserTitle": "知乎",
-            "ProfileImg": ".Avatar.AppHeader-profileAvatar",
+            "ProfileImg": ".Avatar.AppHeader-profileAvatar, div.Comments-container img.Avatar",
             "ArticleTitle": ".QuestionHeader-title",
         },
         'csdn.net': {
@@ -88,9 +152,16 @@
         },
         'bilibili.com': {
             "BrowserTitle": "Bilibili",
-            "ProfileImg": "li.header-avatar-wrap a.header-entry-avatar img, li.header-avatar-wrap a.header-entry-mini picture source",
+            "ProfileImg": `
+                li.header-avatar-wrap a.header-entry-avatar img,
+                li.header-avatar-wrap a.header-entry-mini picture.v-img source,
+                li.header-avatar-wrap a.header-entry-mini picture.v-img img
+            `,
             "ProfileUserName": "div.v-popover-content a.nickname-item",
             "ProfileStatistics": ".counts-item .count-num, div.coins-item span.coin-item__num",
+            "CustomStatistics": {
+                "div.level-item__text": /当前成长\d+，距离升级Lv\.\d+ 还需要\d+/
+            }
         },
         'jianshu.com': {
             "BrowserTitle": "简书",
@@ -101,13 +172,21 @@
             "BrowserTitle": "力扣",
             "ProfileImg": "#navbar_user_avatar img, #web-user-menu a[href^='/u/'] img.object-cover",
             "ProfileUserName": "#web-user-menu div.pl-3 a[href^='/u/']",
-            "ProfileStatistics": "a[href^='/problems/'] > svg + span, section div.text-center p span, #headlessui-popover-button-:r1: a span.text-brand-orange",
+            "ProfileStatistics": `
+                a[href^='/problems/'] > svg + span, section div.text-center p span, #headlessui-popover-button-:r1: a span.text-brand-orange
+            `,
         },
         'juejin.cn': {
             "BrowserTitle": "掘金",
             "ProfileImg": "ul.right-side-nav li.menu .avatar img, div.user-info div.avatar img",
             "ProfileUserName": "div.user-detail a.username",
-            "ProfileStatistics": "ul.actions-count-list div.item-count, div.user-detail a.ore span, a.progress-bar div.jscore-level span, a.progress-bar div.progress span",
+            "ProfileStatistics": `
+                ul.actions-count-list div.item-count, div.user-detail a.ore span
+            `,
+            "CustomStatistics": {
+                "a.progress-bar div.jscore-level span": /JY.[0-9]+/,
+                "a.progress-bar div.progress span": /\d+\s*\/\s*\d+/
+            }
         },
         '52pojie.cn': {
             "BrowserTitle": "吾爱破解",
@@ -142,7 +221,24 @@
             "ArticleTitle": "main div.items-end.text-theme-foreground",
             "ProfileImg": "img:not(main img)",
             "ProfileUserName": "[id^='radix-'] span.block.mx-auto",
-            "ProfileStatistics": "div.text-theme-vibrancyFg button div, div.items-center span.tabular-nums span, div.items-center span.tabular-nums, div.items-center i.i-mgc-fire-cute-fi + span",
+            "ProfileStatistics": `
+                div.text-theme-vibrancyFg button div, div.items-center span.tabular-nums span,
+                div.items-center span.tabular-nums, div.items-center i.i-mgc-fire-cute-fi + span
+            `,
+        },
+        'gitee.com': {
+            "BrowserTitle": "Gitee",
+            "ProfileImg": "#git-nav-user img.avatar, header span.ant-avatar img, main div.top-header span.ant-avatar img, img#avatar-change",
+            "ProfileUserName": "main div.top-header strong.self-center a span, div.user-info a.username",
+            "ProfileStatistics": "main div.top-header li a span.float-right",
+        },
+        'github.com': {
+            "BrowserTitle": "GitHub",
+            "ProfileImg": "div[aria-label='User navigation'] img, div.AppHeader-user img.avatar",
+            "ProfileUserName": `
+                div[aria-label='User navigation'] div.lh-condensed div.text-bold > div,
+                div[aria-label='User navigation'] div.lh-condensed div.fgColor-muted > div
+            `,
         },
     };
 
@@ -182,22 +278,72 @@
         const elements = document.querySelectorAll(selector);
         if (!elements.length) return; // 无匹配时直接返回
         elements.forEach(el => {
-            Array.from(el.childNodes).forEach(child => {
-                if (child.nodeType === Node.TEXT_NODE) {
-                    child.nodeValue = value;
-                }
-            });
+            // 如果是 input[type="text"]，直接修改 value 属性
+            if (el.tagName === 'INPUT' && el.type === 'text') {
+                el.value = value;
+            } else {
+                // 遍历子节点，修改文本内容
+                Array.from(el.childNodes).forEach(child => {
+                    if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim() !== "") {
+                        // 如果不匹配任何规则，直接修改为指定的值
+                        child.nodeValue = value;
+                    }
+                });
+            }
+            // 额外：修改 aria-label 属性
+            if (el.hasAttribute('aria-label')) {
+                el.setAttribute('aria-label', value);
+            }
         });
     }
 
     // 修改图像属性值
     function updateImg(selector) {
         document.querySelectorAll(selector).forEach(el => {
+            // 如果是 <img> 标签
+            if (el.tagName === "IMG") {
+                el.src = IMG_SRC; // 替换 src 属性
+                el.srcset = IMG_SRC; // 替换 srcset 属性
+                if (el.hasAttribute('data-src')) {
+                    el.setAttribute('data-src', IMG_SRC); // 替换 data-src 属性
+                }
+            }
+
+            // 如果是 <source> 标签（用于 <picture> 元素）
+            if (el.tagName === "SOURCE") {
+                el.srcset = IMG_SRC; // 替换 srcset 属性
+            }
+
+            // 检查并修改 style 中的 background-image
+            const backgroundImage = el.style.backgroundImage;
+            if (backgroundImage && backgroundImage.includes("url")) {
+                el.style.backgroundImage = `url(${IMG_SRC})`; // 替换背景图片
+            }
+
+            // 遍历所有属性，替换其他与图片相关的自定义属性
+            Array.from(el.attributes).forEach(attr => {
+                if (attr.name.startsWith('data-') && attr.value.includes('url')) {
+                    el.setAttribute(attr.name, IMG_SRC); // 替换自定义属性的值
+                }
+            });
+        });
+
+        // 递归处理 <picture> 元素内部的 <source> 和 <img> 标签
+        document.querySelectorAll(`${selector} picture`).forEach(picture => {
+            picture.querySelectorAll("source, img").forEach(sourceOrImg => {
+                updateImgElement(sourceOrImg);
+            });
+        });
+    }
+
+    // 单独处理 <source> 和 <img>
+    function updateImgElement(el) {
+        if (el.tagName === "IMG") {
             el.src = IMG_SRC;
             el.srcset = IMG_SRC;
-            el.alt = IMG_ALT;
-            //el.style.cssText = `border: 1px solid #e8e8ed !important;`; // 移除图像边框，保持原网站样式，防止占位
-        });
+        } else if (el.tagName === "SOURCE") {
+            el.srcset = IMG_SRC;
+        }
     }
 
     // 修改元素可见性
@@ -237,22 +383,40 @@
     function hideElements() {
         if (!currentSite) return;
 
+        // 隐匿浏览器标题
         if (settings.hideBrowserTitle && currentSite.BrowserTitle) {
             updateTextContent("head title", currentSite.BrowserTitle);
         }
 
+        // 隐匿头像
         if (settings.hideProfileImg && currentSite.ProfileImg) {
             updateImg(currentSite.ProfileImg);
         }
 
+        // 隐匿用户名
         if (settings.hideProfileUserName && currentSite.ProfileUserName) {
             updateTextContent(currentSite.ProfileUserName, USER_NAME);
         }
 
+        // 针对 ProfileStatistics 处理
         if (settings.hideProfileStatistics && currentSite.ProfileStatistics) {
             updateTextContent(currentSite.ProfileStatistics, USER_STATISTICS);
         }
 
+        // 针对 CustomStatistics 进行精确处理
+        if (settings.hideProfileStatistics && currentSite.CustomStatistics) {
+            for (const [selector, regex] of Object.entries(currentSite.CustomStatistics)) {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(el => {
+                    if (!el.dataset.processed && regex.test(el.textContent)) {
+                        el.textContent = el.textContent.replace(/\d+/g, USER_STATISTICS); // 替换数字
+                        el.dataset.processed = "true";
+                    }
+                });
+            }
+        }
+
+        // 隐匿文章标题
         if (settings.hideArticleTitle && currentSite.ArticleTitle) {
             updateVisibility(currentSite.ArticleTitle);
         }
