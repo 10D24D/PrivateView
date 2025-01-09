@@ -1,49 +1,19 @@
 // ==UserScript==
 // @name         PrivateView
-// @namespace    http://tampermonkey.net/
-// @version      1.2.0
+// @version      1.3.0
 // @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
 // @author       DD1024z
 // @namespace    https://github.com/10D24D/PrivateView/
 // @supportURL   https://github.com/10D24D/PrivateView/
-// @match        *://www.baidu.com/*
-// @match        *://chat.baidu.com/*
-// @match        *://image.baidu.com/*
-// @match        *://tieba.baidu.com/*
-// @match        *://wenku.baidu.com/*
-// @match        *://fanyi.baidu.com/*
-// @match        *://baike.baidu.com/*
-// @match        *://xueshu.baidu.com/*
-// @match        *://jingyan.baidu.com/*
-// @match        *://zhidao.baidu.com/*
-// @match        *://baijiahao.baidu.com/*
-// @match        *://mbd.baidu.com/*
-// @match        *://news.baidu.com/*
-// @match        *://*.so.com/*
-// @match        *://*.bing.com/*
-// @match        *://*.google.com/*
-// @match        *://*.v2ex.com/*
-// @match        *://*.linux.do/*
-// @match        *://*.zhihu.com/*
-// @match        *://*.csdn.net/*
-// @match        *://*.bilibili.com/*
-// @match        *://*.jianshu.com/*
-// @match        *://*.leetcode.cn/*
-// @match        *://*.juejin.cn/*
-// @match        *://*.52pojie.cn/*
-// @match        *://*.itsk.com/*
-// @match        *://*.hifini.com/*
-// @match        *://*.oschina.net/*
-// @match        *://*.51cto.com/*
-// @match        *://app.follow.is/*
-// @match        *://*.gitee.com/*
-// @match        *://*.github.com/*
+// @match        *://*/*
 // @icon         https://raw.githubusercontent.com/10D24D/PrivateView/main/static/icon_max.png
 // @license      Apache License 2.0
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
-// @downloadURL  https://update.greasyfork.org/scripts/520416/PrivateView.user.js
-// @updateURL    https://update.greasyfork.org/scripts/520416/PrivateView.meta.js
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @downloadURL https://update.greasyfork.org/scripts/520416/PrivateView.user.js
+// @updateURL https://update.greasyfork.org/scripts/520416/PrivateView.meta.js
 // ==/UserScript==
 
 (function () {
@@ -51,14 +21,17 @@
 
     if (window.top !== window.self) return; // 不在顶层页面时直接退出脚本
 
-    // 网站配置
+    // 油猴存储的键名
+    const STORAGE_KEY = "PrivateView";
+
+    // 默认网站配置
     // BrowserTitle 浏览器标题
     // ProfileImg 用户头像的样式。多个样式使用, 逗号隔开
     // ProfileUserName 用户名称的元素
     // ArticleTitle 文章标题的元素
     // ProfileStatistics 用户统计数据的元素
     // CustomStatistics 自定义替换匹已匹配统计数据的元素
-    const siteConfig = {
+    const DEFAULT_SITE_CONFIG = {
         'www.baidu.com': {
             "BrowserTitle": "百度",
             "ProfileImg": "#s-top-username span.s-top-img-wrapper img, a.username span[class$='top-img-wrapper'] img",
@@ -71,8 +44,8 @@
         },
         'image.baidu.com': {
             "BrowserTitle": "百度图片",
-            "ProfileImg": "#username_info span.s-top-img-wrapper img",
-            "ProfileUserName": "#username_info span.s-top-username",
+            "ProfileImg": "#username_info span.s-top-img-wrapper img, div[class^='header-wrapper'] img.sc-avatar-img",
+            "ProfileUserName": "#username_info span.s-top-username, div[class^='header-wrapper'] span[class^='user-name']",
         },
         'tieba.baidu.com': {
             "BrowserTitle": "百度贴吧",
@@ -93,9 +66,9 @@
             "BrowserTitle": "百度百科",
             "ProfileImg": "#user_info img.head_img",
             "ProfileUserName": `
-                div.user-bar.user-login > div:nth-child(2) a:first-of-type:not([href]):not([aria-label]):has(i),
-                div.fixedWrapper a[href^='/usercenter']
-            `
+            div.user-bar.user-login > div:nth-child(2) a:first-of-type:not([href]):not([aria-label]):has(i),
+            div.fixedWrapper a[href^='/usercenter']
+        `
         },
         'xueshu.baidu.com': {
             "BrowserTitle": "百度学术",
@@ -113,8 +86,8 @@
             "ProfileUserName": "#user-name span.user-name-span, div.login-slogan a.user-name-link",
             "ProfileStatistics": "div.answer-question-section span.item-num",
             "CustomStatistics": {
-                "div.user-grade": /LV[0-9]+/,
-                "div.help-people-count": /已经帮助了\d+人/
+                "div.user-grade": "LV[0-9]+",
+                "div.help-people-count": "/已经帮助了\\d+人/"
             }
         },
         'baijiahao.baidu.com, mbd.baidu.com': {
@@ -169,14 +142,21 @@
                 li.header-avatar-wrap a.header-entry-avatar img,
                 li.header-avatar-wrap a.header-entry-mini picture.v-img source,
                 li.header-avatar-wrap a.header-entry-mini picture.v-img img,
-                div.index-info div.home-head img
+                div.index-info div.home-head img,
+                div.bili-dyn-my-info img.b-img__inner
             `,
-            "ProfileUserName": "div.v-popover-content a.nickname-item, div.index-info span.home-top-msg-name",
-            "ProfileStatistics": ".counts-item .count-num, div.coins-item span.coin-item__num, div.home-top-bp span.curren-b-num, span.home-top-level-number i.now-num, span.home-top-level-number i.max-num",
+            "ProfileUserName": `
+                div.v-popover-content a.nickname-item, div.index-info span.home-top-msg-name, div.bili-dyn-my-info div.info__name
+            `,
+            "ProfileStatistics": `
+                .counts-item .count-num, div.coins-item span.coin-item__num, div.home-top-bp span.curren-b-num,
+                span.home-top-level-number i.now-num, span.home-top-level-number i.max-num,
+                div.bili-dyn-my-info div.item-num
+            `,
             "CustomStatistics": {
-                "div.level-item__text": /当前成长\d+，距离升级Lv\.\d+ 还需要\d+/,
-                "span.home-top-level-head": /LV[0-9]/,
-                "i.home-level-tips": /LV[0-9]/,
+                "div.level-item__text": "当前成长\\d+，距离升级Lv\\.\\d+ 还需要\\d+",
+                "span.home-top-level-head": "LV[0-9]",
+                "i.home-level-tips": "LV[0-9]",
             }
         },
         'jianshu.com': {
@@ -200,8 +180,8 @@
                 ul.actions-count-list div.item-count, div.user-detail a.ore span
             `,
             "CustomStatistics": {
-                "a.progress-bar div.jscore-level span": /JY.[0-9]+/,
-                "a.progress-bar div.progress span": /\d+\s*\/\s*\d+/
+                "a.progress-bar div.jscore-level span": "/JY.[0-9]+/",
+                "a.progress-bar div.progress span": "\\d+\\s*\\/\\s*\\d+"
             }
         },
         '52pojie.cn': {
@@ -258,16 +238,22 @@
         },
     };
 
+    // 从油猴存储获取用户自定义的站点配置
+    const storedConfig = GM_getValue(STORAGE_KEY, null);
+
+    // 优先使用用户定义的配置
+    const siteConfig = storedConfig || DEFAULT_SITE_CONFIG;
+
     const IMG_SRC = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="; // 隐匿图像资源后替换的内容。空白图片
     const IMG_ALT = ""; // 隐匿图像提示内容后替换的内容
     const USER_NAME = "User"; // 隐匿用户名称后显示的内容
     const USER_STATISTICS = "?"; // 隐匿用户统计数据后显示的内容
     let originalTitle = document.title; // 记录原始页面标题
 
-    // 动态生成 localStorage 键名
     const storageKey = `PrivateViewSettings`;
     const currentHostname = Object.keys(siteConfig).find(keys => keys.split(',').some(host => location.hostname.includes(host.trim())));
     const currentSite = siteConfig[currentHostname];
+    console.log(`PrivateView: 脚本正在运行于 ${location.hostname}`);
 
     // 使用 localStorage 缓存开关状态
     let settings = JSON.parse(localStorage.getItem(storageKey)) || {
@@ -277,6 +263,7 @@
         hideProfileImg: true,
         hideProfileUserName: true,
         hideProfileStatistics: true,
+        hideAllImg: false,
     };
 
     if (!localStorage.getItem(storageKey) && currentSite) {
@@ -421,20 +408,32 @@
 
         // 针对 CustomStatistics 进行精确处理
         if (settings.hideProfileStatistics && currentSite.CustomStatistics) {
-            for (const [selector, regex] of Object.entries(currentSite.CustomStatistics)) {
-                const elements = document.querySelectorAll(selector);
-                elements.forEach(el => {
-                    if (!el.dataset.processed && regex.test(el.textContent)) {
-                        el.textContent = el.textContent.replace(/\d+/g, USER_STATISTICS); // 替换数字
-                        el.dataset.processed = "true";
-                    }
-                });
+            for (const [selector, regexString] of Object.entries(currentSite.CustomStatistics)) {
+                try {
+                    // **去掉开头和结尾的 `/`，确保是合法正则**
+                    let regexPattern = regexString.replace(/^\/|\/$/g, '');
+                    let regex = new RegExp(regexPattern);
+
+                    document.querySelectorAll(selector).forEach(el => {
+                        if (!el.dataset.processed && regex.test(el.textContent)) {
+                            el.textContent = el.textContent.replace(/\d+/g, USER_STATISTICS); // 替换数字
+                            el.dataset.processed = "true";
+                        }
+                    });
+                } catch (error) {
+                    console.error(`PrivateView: 解析正则失败 - ${regexString}`, error);
+                }
             }
         }
 
         // 隐匿文章标题
         if (settings.hideArticleTitle && currentSite.ArticleTitle) {
             updateVisibility(currentSite.ArticleTitle);
+        }
+
+        // 屏蔽所有图片
+        if (settings.hideAllImg) {
+            updateImg("img, source, svg, div, span, section, article, aside, header, footer, main, nav");
         }
     }
 
@@ -481,47 +480,349 @@
         updateMenuCommands();
     }
 
+    function getPrimaryDomain(hostname) {
+        let parts = hostname.split('.');
+        return parts.length > 2 ? parts.slice(-2).join('.') : hostname;
+    }
+
+    // **显示模态框（新增 editMode 变量）**
+    function showModal(editMode = false) {
+        let modal = document.getElementById("privateViewModal");
+
+        // **当前网站信息**
+        const currentHost = location.hostname;
+        const primaryDomain = getPrimaryDomain(currentHost);
+
+        let storedConfig = GM_getValue(STORAGE_KEY, {}); // 读取所有配置
+        let currentConfig = storedConfig[currentHost] || storedConfig[primaryDomain] || {}; // **先尝试获取当前域名配置，再回退到一级域名**
+
+        let customStatsDisplay = "";
+        if (currentConfig.CustomStatistics) {
+            customStatsDisplay = JSON.stringify(currentConfig.CustomStatistics, null, 2);
+        }
+
+        // **检查是否为默认配置**
+        const hasDefaultConfig = !!DEFAULT_SITE_CONFIG[currentHost] || !!DEFAULT_SITE_CONFIG[primaryDomain];
+
+        // **如果模态框已存在，则直接显示**
+        if (modal) {
+            modal.style.display = "block";
+            return;
+        }
+
+        console.log(`PrivateView: ${editMode ? "修改" : "新增"} 网站配置模态框`);
+
+        // **创建模态框**
+        modal = document.createElement("div");
+        modal.id = "privateViewModal";
+        modal.innerHTML = `
+            <div style="
+                position: fixed; top: 50%; left: 50%;
+                transform: translate(-50%, -50%); z-index: 9999;
+                background: white; padding: 20px; box-shadow: 0px 0px 10px rgba(0,0,0,0.5);
+                border-radius: 10px; width: 500px; font-family: Arial, sans-serif;">
+                <h3>${editMode ? "✏️ 修改网站配置" : "➕ 添加网站配置"}</h3>
+                <p style="color: grey;">${editMode && !storedConfig[currentHost] ? `当前域名(${currentHost})没有独立配置，正在修改${primaryDomain}的配置` : `配置作用于 ${currentHost}`}</p>
+
+                <label>🔖 隐匿网页标题：</label><br>
+                <input type="text" id="siteName" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.BrowserTitle || ''}"><br>
+
+                <label>🧢 隐匿个人头像的选择器：</label><br>
+                <input type="text" id="profileImg" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.ProfileImg || ''}"><br>
+
+                <label>👤 隐匿用户名的选择器：</label><br>
+                <input type="text" id="profileUserName" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.ProfileUserName || ''}"><br>
+
+                <label>📰 隐匿文章标题的选择器：</label><br>
+                <input type="text" id="articleTitle" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.ArticleTitle || ''}"><br>
+
+                <label>🏅 隐匿个人数据的选择器：</label><br>
+                <input type="text" id="profileStatistics" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.ProfileStatistics || ''}"><br>
+
+                <label>✏️ 隐匿自定义数据的选择器 (JSON格式)：</label><br>
+                <input type="text" id="customProfileStatistics" style="width: 100%; padding: 5px; margin-bottom: 10px;"
+                    value='${currentConfig.CustomStatistics ? JSON.stringify(currentConfig.CustomStatistics) : ''}'><br>
+
+                ${hasDefaultConfig ? `
+                    <button id="resetDefaultConfig" style="background:rgb(255, 99, 71); color: white; padding: 10px 20px; border: none; cursor: pointer;">🔄 恢复默认配置</button>
+                ` : ""}
+                <button id="saveSiteConfig" style="background:rgb(40, 127, 167); color: white; padding: 10px 20px; border: none; cursor: pointer; margin-left: 10px;">
+                    ${editMode ? "💾 保存修改" : "✅ 添加网站"}
+                </button>
+                 <button id="cancelModal" style="background:rgb(210, 216, 213); color: white; padding: 10px 20px; border: none; cursor: pointer; margin-left: 10px;">❌ 取消</button>
+
+            </div>
+        `;
+
+        // **插入模态框**
+        document.body.appendChild(modal);
+
+        // **绑定取消按钮**
+        document.getElementById("cancelModal").addEventListener("click", () => {
+            modal.style.display = "none";
+        });
+
+        // **绑定保存按钮**
+        document.getElementById("saveSiteConfig").addEventListener("click", () => saveCurrentSiteConfig(editMode));
+
+        // **绑定恢复默认配置按钮**
+        if (hasDefaultConfig) {
+            document.getElementById("resetDefaultConfig").addEventListener("click", () => resetSiteToDefaultConfig(currentHost));
+        }
+    }
+
+    // **保存/修改网站配置**
+    function saveCurrentSiteConfig(editMode = false) {
+        const currentHost = location.hostname;
+        const primaryDomain = getPrimaryDomain(currentHost); // 获取主域名
+        const siteToSave = editMode && !GM_getValue(STORAGE_KEY, {})[currentHost] ? primaryDomain : currentHost; // **如果子域名无配置，修改主域名配置**
+
+        const siteName = document.getElementById("siteName").value.trim();
+        const profileImg = document.getElementById("profileImg").value.trim();
+        const profileUserName = document.getElementById("profileUserName").value.trim();
+        const articleTitle = document.getElementById("articleTitle").value.trim();
+        const profileStatistics = document.getElementById("profileStatistics").value.trim();
+        const customProfileStatistics = document.getElementById("customProfileStatistics").value.trim();
+
+        if (!siteName) {
+            alert("⚠️ 网站名称不能为空！");
+            return;
+        }
+
+        // **解析 JSON 数据**
+        // 解析 JSON 数据
+        let customStatsParsed = {};
+        try {
+            if (customProfileStatistics) {
+                let tempStats = JSON.parse(customProfileStatistics);
+                for (const [key, value] of Object.entries(tempStats)) {
+                    customStatsParsed[key] = value.toString(); // 直接存字符串
+                }
+            }
+        } catch (error) {
+            alert("❌ 自定义数据格式错误，请输入正确的 JSON 格式！");
+            return;
+        }
+
+        // **创建新配置**
+        let newSiteConfig = {
+            "BrowserTitle": siteName,
+            ...(profileImg ? { "ProfileImg": profileImg } : {}),
+            ...(profileUserName ? { "ProfileUserName": profileUserName } : {}),
+            ...(articleTitle ? { "ArticleTitle": articleTitle } : {}),
+            ...(profileStatistics ? { "ProfileStatistics": profileStatistics } : {}),
+            ...(Object.keys(customStatsParsed).length ? { "CustomStatistics": customStatsParsed } : {})
+        };
+
+        let storedConfig = GM_getValue(STORAGE_KEY, {});
+        storedConfig[siteToSave] = newSiteConfig;
+        GM_setValue(STORAGE_KEY, storedConfig); // **存储数据**
+
+        if (confirm(`✅ ${editMode ? "修改" : "添加"}成功！\n${siteName} (${siteToSave}) 的配置已保存。立即刷新页面即可生效。`)) {
+            location.reload();
+        }
+        document.getElementById("privateViewModal").style.display = "none";
+    }
+
+    // 移除当前网站配置
+    function removeCurrentSiteConfig() {
+        const host = location.hostname;
+        let domainParts = host.split('.');
+
+        // **检查是否为子域名，例如 "tieba.baidu.com" -> "baidu.com"**
+        let topLevelDomain = domainParts.length > 2 ? domainParts.slice(-2).join('.') : null;
+
+        // **加载最新数据**
+        let storedConfig = GM_getValue(STORAGE_KEY, {});
+
+        // **删除当前域名的存储和默认配置**
+        if (storedConfig[host] || DEFAULT_SITE_CONFIG[host]) {
+            if (!confirm(`⚠️ 确定要移除 ${host} 的配置吗？`)) return;
+
+            delete storedConfig[host];
+            delete DEFAULT_SITE_CONFIG[host]; // **同步删除默认配置**
+            GM_setValue(STORAGE_KEY, storedConfig);
+
+            if (confirm(`✅ ${host} 配置已移除！立即刷新页面即可生效。`)) {
+                location.reload();
+            }
+            return;
+        }
+
+        // **如果当前域名没有匹配，检查顶级域名**
+        if (topLevelDomain && (storedConfig[topLevelDomain] || DEFAULT_SITE_CONFIG[topLevelDomain])) {
+            if (confirm(`⚠️ ${topLevelDomain} 有配置，是否移除？`)) {
+                delete storedConfig[topLevelDomain];
+                delete DEFAULT_SITE_CONFIG[topLevelDomain];
+                GM_setValue(STORAGE_KEY, storedConfig);
+
+                if (confirm(`✅ ${topLevelDomain} 配置已移除！立即刷新页面即可生效。`)) {
+                    location.reload();
+                }
+                return;
+            }
+        } else {
+            alert(`⚠️ ${host} 没有找到可删除的配置！`);
+        }
+    }
+
+    // 恢复已有的默认网站配置
+    function resetSiteToDefaultConfig(site) {
+        if (!confirm(`⚠️ 确定要恢复 ${site} 的默认配置吗？自定义设置将会被删除！`)) return;
+
+        let storedConfig = GM_getValue(STORAGE_KEY, {});
+
+        // **获取主域名**
+        let primaryDomain = getPrimaryDomain(site);
+
+        // **删除所有相关自定义配置（主域名 & 子域名）**
+        delete storedConfig[site];
+        if (primaryDomain !== site) {
+            delete storedConfig[primaryDomain];
+        }
+
+        // **检查是否存在默认配置**
+        let defaultConfig = DEFAULT_SITE_CONFIG[primaryDomain] || DEFAULT_SITE_CONFIG[site];
+
+        if (defaultConfig) {
+            // **如果存在默认配置，强制写入**
+            storedConfig[primaryDomain] = defaultConfig;
+            GM_setValue(STORAGE_KEY, storedConfig);
+            if (confirm(`✅ ${site} 已恢复默认配置！立即刷新页面即可生效。`)) {
+                location.reload();
+            }
+        } else {
+            // **如果 `DEFAULT_SITE_CONFIG` 也没有值，那就是本身没有默认值**
+            alert(`⚠️ ${site} 的自定义配置已删除，但没有默认配置可恢复！`);
+        }
+    }
+
+    // 恢复默认网站配置
+    function resetToDefaultConfig() {
+        if (!confirm("⚠️ 确定要恢复默认配置吗？所有自定义配置会被清除！")) return;
+
+        GM_setValue(STORAGE_KEY, DEFAULT_SITE_CONFIG);
+        if (confirm(`✅ 已恢复默认网站配置！立即刷新页面即可生效。`)) {
+            location.reload();
+        }
+    }
+
+    // 查看所有网站配置
+    function viewAllSiteConfigs() {
+        const storedConfig = GM_getValue(STORAGE_KEY, {});
+        const allConfigs = JSON.stringify(storedConfig, null, 4);
+
+        const newWindow = window.open("", "_blank");
+        newWindow.document.write(`
+            <html>
+            <head>
+                <title>所有网站配置</title>
+                <style> body { font-family: monospace; white-space: pre-wrap; } </style>
+            </head>
+            <body>
+                <h2>📜 所有网站配置</h2>
+                <pre>${allConfigs}</pre>
+            </body>
+            </html>
+        `);
+        newWindow.document.close();
+    }
+
     // 存储菜单项的引用
     let menuItems = {};
 
     function updateMenuCommands() {
-        // 如果菜单项已经存在，先移除旧菜单
-        if (menuItems.hiddenModeEnabled) GM_unregisterMenuCommand(menuItems.hiddenModeEnabled);
-        if (menuItems.hideBrowserTitle) GM_unregisterMenuCommand(menuItems.hideBrowserTitle);
-        if (menuItems.hideArticleTitle) GM_unregisterMenuCommand(menuItems.hideArticleTitle);
-        if (menuItems.hideProfileImg) GM_unregisterMenuCommand(menuItems.hideProfileImg);
-        if (menuItems.hideProfileUserName) GM_unregisterMenuCommand(menuItems.hideProfileUserName);
-        if (menuItems.hideProfileStatistics) GM_unregisterMenuCommand(menuItems.hideProfileStatistics);
+        // 先移除旧菜单
+        Object.values(menuItems).forEach(GM_unregisterMenuCommand);
 
-        menuItems.hiddenModeEnabled = GM_registerMenuCommand(
-            settings.hiddenModeEnabled ? "🌐一键关闭隐匿浏览" : "🌐一键开启隐匿浏览",
-            () => toggleSetting('hiddenModeEnabled')
-        );
+        if (currentSite) {
 
-        menuItems.hideBrowserTitle = GM_registerMenuCommand(
-            settings.hideBrowserTitle ? "🔖隐匿网页标题✅" : "🔖隐匿网页标题❌",
-            () => toggleSetting('hideBrowserTitle')
-        );
+            menuItems.hiddenModeEnabled = GM_registerMenuCommand(
+                settings.hiddenModeEnabled ? "🌐一键关闭隐匿浏览" : "🌐一键开启隐匿浏览",
+                () => toggleSetting('hiddenModeEnabled')
+            );
 
-        menuItems.hideArticleTitle = GM_registerMenuCommand(
-            settings.hideArticleTitle ? "📰隐匿文章标题✅" : "📰隐匿文章标题❌",
-            () => toggleSetting('hideArticleTitle')
-        );
+            menuItems.hideBrowserTitle = GM_registerMenuCommand(
+                settings.hideBrowserTitle ? "🔖隐匿网页标题✅" : "🔖隐匿网页标题❌",
+                () => toggleSetting('hideBrowserTitle')
+            );
 
-        menuItems.hideProfileImg = GM_registerMenuCommand(
-            settings.hideProfileImg ? "🧢隐匿个人头像✅" : "🧢隐匿个人头像❌",
-            () => toggleSetting('hideProfileImg')
-        );
+            menuItems.hideArticleTitle = GM_registerMenuCommand(
+                settings.hideArticleTitle ? "📰隐匿文章标题✅" : "📰隐匿文章标题❌",
+                () => toggleSetting('hideArticleTitle')
+            );
 
-        menuItems.hideProfileUserName = GM_registerMenuCommand(
-            settings.hideProfileUserName ? "👤隐匿个人昵称✅" : "👤隐匿个人昵称❌",
-            () => toggleSetting('hideProfileUserName')
-        );
+            menuItems.hideProfileImg = GM_registerMenuCommand(
+                settings.hideProfileImg ? "🧢隐匿个人头像✅" : "🧢隐匿个人头像❌",
+                () => toggleSetting('hideProfileImg')
+            );
 
-        menuItems.hideProfileStatistics = GM_registerMenuCommand(
-            settings.hideProfileStatistics ? "🏅隐匿个人数据✅" : "🏅隐匿个人数据❌",
-            () => toggleSetting('hideProfileStatistics')
-        );
+            menuItems.hideProfileUserName = GM_registerMenuCommand(
+                settings.hideProfileUserName ? "👤隐匿个人昵称✅" : "👤隐匿个人昵称❌",
+                () => toggleSetting('hideProfileUserName')
+            );
+
+            menuItems.hideProfileStatistics = GM_registerMenuCommand(
+                settings.hideProfileStatistics ? "🏅隐匿个人数据✅" : "🏅隐匿个人数据❌",
+                () => toggleSetting('hideProfileStatistics')
+            );
+
+            menuItems.hideAllImg = GM_registerMenuCommand(
+                settings.hideAllImg ? "🧩屏蔽所有图片✅" : "🧩屏蔽所有图片❌",
+                () => toggleSetting('hideAllImg')
+            );
+
+            menuItems.updateCurrentSite = GM_registerMenuCommand(
+                `✏️修改当前网站配置`,
+                () => showModal(true)
+            );
+
+            menuItems.viewAllConfigs = GM_registerMenuCommand(
+                `📜查看所有网站配置`,
+                () => viewAllSiteConfigs()
+            );
+
+            menuItems.removeCurrentSite = GM_registerMenuCommand(
+                `🗑️移除当前网站配置`,
+                () => removeCurrentSiteConfig()
+            );
+
+            menuItems.resetDefaultConfig = GM_registerMenuCommand(
+                `🔄恢复所有网站配置`,
+                () => resetToDefaultConfig()
+            );
+
+            menuItems.resetDefaultConfig = GM_registerMenuCommand(
+                `🏠关于PrivateView`,
+                () => window.open('https://github.com/10D24D/PrivateView/')
+            );
+
+        } else {
+
+            GM_registerMenuCommand(
+                `⚠️当前网站未适配（${location.hostname}）`,
+                () => {
+                    window.open('https://greasyfork.org/zh-CN/scripts/520416-privateview/feedback', '_blank');
+                }
+            );
+            menuItems.addCurrentSite = GM_registerMenuCommand(
+                `➕添加网站配置`,
+                () => showModal(false)
+            );
+
+            menuItems.viewAllConfigs = GM_registerMenuCommand(
+                `📜查看所有网站配置`,
+                () => viewAllSiteConfigs()
+            );
+
+            menuItems.resetDefaultConfig = GM_registerMenuCommand(
+                `🔄恢复所有网站配置`,
+                () => resetToDefaultConfig()
+            );
+
+            return; // 不注册其他菜单项
+
+        }
     }
 
     // 注册菜单开关
