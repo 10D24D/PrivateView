@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         PrivateView
-// @version      1.3.0
+// @version      1.3.2
 // @description  隐匿浏览——浏览页面时，将关键信息进行隐匿，以保护个人信息安全。也许你在公共场所办公时，常常想不让其他人看见自己在B站上的用户昵称、头像、关注数、粉丝数、动态数，那就巧了，这个扩展脚本可以很好的解决该问题。目前支持bilibili、csdn、zhihu、linux.do、v2ex网站，后续计划实现让用户可自定义指定网站使用隐匿浏览的功能。
 // @author       DD1024z
 // @namespace    https://github.com/10D24D/PrivateView/
@@ -21,8 +21,7 @@
 
     if (window.top !== window.self) return; // 不在顶层页面时直接退出脚本
 
-    // 油猴存储的键名
-    const STORAGE_KEY = "PrivateView";
+    const APP_NAME = "PrivateView";
 
     // 默认网站配置
     // BrowserTitle 浏览器标题
@@ -173,7 +172,7 @@
             `,
         },
         'juejin.cn': {
-            "BrowserTitle": "掘金",
+            "BrowserTitle": "稀土掘金",
             "ProfileImg": "ul.right-side-nav li.menu .avatar img, div.user-info div.avatar img",
             "ProfileUserName": "div.user-detail a.username",
             "ProfileStatistics": `
@@ -239,7 +238,7 @@
     };
 
     // 从油猴存储获取用户自定义的站点配置
-    const storedConfig = GM_getValue(STORAGE_KEY, null);
+    const storedConfig = GM_getValue(APP_NAME, null);
 
     // 优先使用用户定义的配置
     const siteConfig = storedConfig || DEFAULT_SITE_CONFIG;
@@ -253,7 +252,6 @@
     const storageKey = `PrivateViewSettings`;
     const currentHostname = Object.keys(siteConfig).find(keys => keys.split(',').some(host => location.hostname.includes(host.trim())));
     const currentSite = siteConfig[currentHostname];
-    console.log(`PrivateView: 脚本正在运行于 ${location.hostname}`);
 
     // 使用 localStorage 缓存开关状态
     let settings = JSON.parse(localStorage.getItem(storageKey)) || {
@@ -410,7 +408,7 @@
         if (settings.hideProfileStatistics && currentSite.CustomStatistics) {
             for (const [selector, regexString] of Object.entries(currentSite.CustomStatistics)) {
                 try {
-                    // **去掉开头和结尾的 `/`，确保是合法正则**
+                    // 去掉开头和结尾的 `/`，确保是合法正则
                     let regexPattern = regexString.replace(/^\/|\/$/g, '');
                     let regex = new RegExp(regexPattern);
 
@@ -431,8 +429,14 @@
             updateVisibility(currentSite.ArticleTitle);
         }
 
-        // 屏蔽所有图片
+        // 屏蔽所有视图
         if (settings.hideAllImg) {
+            // 清空视频源，防止加载
+            document.querySelectorAll('video').forEach(video => {
+                video.src = '';
+                video.load(); // 清除现有加载的资源
+            });
+
             updateImg("img, source, svg, div, span, section, article, aside, header, footer, main, nav");
         }
     }
@@ -485,126 +489,298 @@
         return parts.length > 2 ? parts.slice(-2).join('.') : hostname;
     }
 
-    // **显示模态框（新增 editMode 变量）**
-    function showModal(editMode = false) {
-        let modal = document.getElementById("privateViewModal");
-
-        // **当前网站信息**
+    function getCurrentSiteConfig() {
         const currentHost = location.hostname;
         const primaryDomain = getPrimaryDomain(currentHost);
+        const storedConfig = GM_getValue(APP_NAME, {});
 
-        let storedConfig = GM_getValue(STORAGE_KEY, {}); // 读取所有配置
-        let currentConfig = storedConfig[currentHost] || storedConfig[primaryDomain] || {}; // **先尝试获取当前域名配置，再回退到一级域名**
+        // 先尝试获取当前域名的配置，如果没有，则回退到主域名
+        return storedConfig[currentHost] || storedConfig[primaryDomain] || {};
+    }
 
-        let customStatsDisplay = "";
+    // 添加全局 CSS 样式
+    function addCustomStyles() {
+        const styleId = `${APP_NAME}-styles`;
+        if (document.getElementById(styleId)) return;
+
+        const style = document.createElement("style");
+        style.id = styleId;
+        style.textContent = `
+            .${APP_NAME}-modal {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 9999;
+                background: white;
+                padding: 20px;
+                box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+                border-radius: 10px;
+                width: 600px;
+                max-height: 800px;
+                font-family: Arial, sans-serif;
+                text-rendering: optimizeLegibility;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+            }
+
+            .${APP_NAME}-modal h3 {
+                text-align: center;
+                font-size: 18px;
+            }
+
+            .${APP_NAME}-modal p {
+                color: grey;
+                text-align: center;
+                font-size: 14px;
+            }
+
+            .${APP_NAME}-modal label {
+                display: block;
+                margin: 10px 0 5px 0;
+                font-size: 14px;
+                font-weight: bold;
+                text-align: left;
+            }
+
+            .${APP_NAME}-modal input,
+            .${APP_NAME}-modal textarea {
+                width: 100%;
+                padding: 6px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+
+            .${APP_NAME}-modal button {
+                padding: 10px 20px;
+                border: none;
+                cursor: pointer;
+                margin: 10px 5px;
+                border-radius: 5px;
+                font-size: 14px;
+                transition: all 0.2s ease-in-out;
+            }
+
+            .${APP_NAME}-modal .${APP_NAME}-save-btn {
+                background: rgb(40, 127, 167);
+                color: white;
+            }
+
+            .${APP_NAME}-modal .${APP_NAME}-cancel-btn {
+                background: rgb(210, 216, 213);
+                color: black;
+            }
+
+            .${APP_NAME}-modal .${APP_NAME}-reset-btn {
+                background: rgb(255, 99, 71);
+                color: white;
+            }
+
+            .${APP_NAME}-modal-buttons {
+                text-align: center;
+            }
+
+            .${APP_NAME}-scrollable-box {
+                border: 1px solid #ccc;
+                padding: 10px;
+                max-height: 110px;
+                overflow-y: auto;
+                background: #ffffff;
+                border-radius: 5px;
+                min-height: 38px;
+            }
+
+            .${APP_NAME}-rule-item {
+                display: flex;
+                align-items: center;
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                background: #fff;
+                margin-bottom: 5px;
+            }
+
+            .${APP_NAME}-rule-key,
+            .${APP_NAME}-rule-value {
+                flex: 1;
+                padding: 6px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                font-size: 14px;
+                margin-right: 5px;
+            }
+
+            .${APP_NAME}-removeRule {
+                color: white;
+                border: none;
+                cursor: pointer;
+                padding: 8px;
+                border-radius: 5px;
+                transition: background 0.2s ease-in-out;
+            }
+
+            .${APP_NAME}-add-btn {
+                display: block;
+                width: 100%;
+                background: #007bff;
+                color: white;
+                text-align: center;
+                padding: 10px;
+                margin-left: 0px !important;
+                border-radius: 5px;
+                font-size: 14px;
+                cursor: pointer;
+                transition: background 0.2s ease-in-out;
+            }
+
+        `;
+        document.head.appendChild(style);
+    }
+
+    // 重新加载模态框数据
+    function reloadModalData() {
+        const currentConfig = getCurrentSiteConfig();
+
+        document.getElementById(`${APP_NAME}-siteName`).value = currentConfig.BrowserTitle || "";
+        document.getElementById(`${APP_NAME}-profileImg`).value = currentConfig.ProfileImg || "";
+        document.getElementById(`${APP_NAME}-profileUserName`).value = currentConfig.ProfileUserName || "";
+        document.getElementById(`${APP_NAME}-articleTitle`).value = currentConfig.ArticleTitle || "";
+        document.getElementById(`${APP_NAME}-profileStatistics`).value = currentConfig.ProfileStatistics || "";
+
+        // 重新填充自定义规则
+        const container = document.getElementById(`${APP_NAME}-customStatsContainer`);
+        container.innerHTML = ""; // 清空已有数据
         if (currentConfig.CustomStatistics) {
-            customStatsDisplay = JSON.stringify(currentConfig.CustomStatistics, null, 2);
+            Object.entries(currentConfig.CustomStatistics).forEach(([key, value]) => {
+                addCustomRule(key, value);
+            });
         }
+    }
 
-        // **检查是否为默认配置**
-        const hasDefaultConfig = !!DEFAULT_SITE_CONFIG[currentHost] || !!DEFAULT_SITE_CONFIG[primaryDomain];
-
-        // **如果模态框已存在，则直接显示**
+    // 显示模态框
+    function showModal(editMode = false) {
+        let modal = document.getElementById(`${APP_NAME}-modal`);
         if (modal) {
+            reloadModalData(); // **每次打开模态框时，重新加载数据**
             modal.style.display = "block";
             return;
         }
 
-        console.log(`PrivateView: ${editMode ? "修改" : "新增"} 网站配置模态框`);
+        // 添加 CSS 修复字体模糊
+        addCustomStyles();
 
-        // **创建模态框**
+        const currentHost = location.hostname;
+        const primaryDomain = getPrimaryDomain(currentHost);
+        const hasDefaultConfig = editMode && (DEFAULT_SITE_CONFIG[currentHost] || DEFAULT_SITE_CONFIG[primaryDomain]);
+
         modal = document.createElement("div");
-        modal.id = "privateViewModal";
+        modal.id = `${APP_NAME}-modal`;
+        modal.classList.add(`${APP_NAME}-modal`);
+        modal.dataset.editMode = editMode ? "true" : "false";
+
         modal.innerHTML = `
-            <div style="
-                position: fixed; top: 50%; left: 50%;
-                transform: translate(-50%, -50%); z-index: 9999;
-                background: white; padding: 20px; box-shadow: 0px 0px 10px rgba(0,0,0,0.5);
-                border-radius: 10px; width: 500px; font-family: Arial, sans-serif;">
-                <h3>${editMode ? "✏️ 修改网站配置" : "➕ 添加网站配置"}</h3>
-                <p style="color: grey;">${editMode && !storedConfig[currentHost] ? `当前域名(${currentHost})没有独立配置，正在修改${primaryDomain}的配置` : `配置作用于 ${currentHost}`}</p>
+        <h3>🛠️ ${editMode ? '修改' : '添加'}网站配置</h3>
+        <p>配置作用于 <b>${currentHost}</b></p>
 
-                <label>🔖 隐匿网页标题：</label><br>
-                <input type="text" id="siteName" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.BrowserTitle || ''}"><br>
+        <label>🔖 隐匿网页标题：</label>
+        <input type="text" id="${APP_NAME}-siteName">
 
-                <label>🧢 隐匿个人头像的选择器：</label><br>
-                <input type="text" id="profileImg" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.ProfileImg || ''}"><br>
+        <label>🧢 隐匿个人头像的选择器：</label>
+        <textarea id="${APP_NAME}-profileImg" rows="2"></textarea>
 
-                <label>👤 隐匿用户名的选择器：</label><br>
-                <input type="text" id="profileUserName" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.ProfileUserName || ''}"><br>
+        <label>👤 隐匿用户名的选择器：</label>
+        <textarea id="${APP_NAME}-profileUserName" rows="2"></textarea>
 
-                <label>📰 隐匿文章标题的选择器：</label><br>
-                <input type="text" id="articleTitle" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.ArticleTitle || ''}"><br>
+        <label>📰 隐匿文章标题的选择器：</label>
+        <textarea id="${APP_NAME}-articleTitle" rows="2"></textarea>
 
-                <label>🏅 隐匿个人数据的选择器：</label><br>
-                <input type="text" id="profileStatistics" style="width: 100%; padding: 5px; margin-bottom: 10px;" value="${currentConfig.ProfileStatistics || ''}"><br>
+        <label>🏅 隐匿个人数据的选择器：</label>
+        <textarea id="${APP_NAME}-profileStatistics" rows="2"></textarea>
 
-                <label>✏️ 隐匿自定义数据的选择器 (JSON格式)：</label><br>
-                <input type="text" id="customProfileStatistics" style="width: 100%; padding: 5px; margin-bottom: 10px;"
-                    value='${currentConfig.CustomStatistics ? JSON.stringify(currentConfig.CustomStatistics) : ''}'><br>
+        <label>✏️ 隐匿自定义数据的选择器：</label>
+        <div id="${APP_NAME}-customStatsContainer" class="${APP_NAME}-scrollable-box"></div>
+        <button id="${APP_NAME}-addRule" class="${APP_NAME}-add-btn">➕ 添加规则</button>
 
-                ${hasDefaultConfig ? `
-                    <button id="resetDefaultConfig" style="background:rgb(255, 99, 71); color: white; padding: 10px 20px; border: none; cursor: pointer;">🔄 恢复默认配置</button>
-                ` : ""}
-                <button id="saveSiteConfig" style="background:rgb(40, 127, 167); color: white; padding: 10px 20px; border: none; cursor: pointer; margin-left: 10px;">
-                    ${editMode ? "💾 保存修改" : "✅ 添加网站"}
-                </button>
-                 <button id="cancelModal" style="background:rgb(210, 216, 213); color: white; padding: 10px 20px; border: none; cursor: pointer; margin-left: 10px;">❌ 取消</button>
+        <div class="${APP_NAME}-modal-buttons">
+            ${hasDefaultConfig ? `<button id="${APP_NAME}-resetBtn" class="${APP_NAME}-reset-btn">🔄 恢复默认配置</button>` : ''}
+            <button id="${APP_NAME}-saveBtn" class="${APP_NAME}-save-btn">💾 保存</button>
+            <button id="${APP_NAME}-cancelBtn" class="${APP_NAME}-cancel-btn">❌ 取消</button>
+        </div>
+    `;
 
-            </div>
-        `;
-
-        // **插入模态框**
         document.body.appendChild(modal);
 
-        // **绑定取消按钮**
-        document.getElementById("cancelModal").addEventListener("click", () => {
+        // 每次打开模态框时，重新加载数据
+        reloadModalData();
+
+        // 绑定事件
+        document.getElementById(`${APP_NAME}-cancelBtn`).addEventListener("click", () => {
             modal.style.display = "none";
         });
 
-        // **绑定保存按钮**
-        document.getElementById("saveSiteConfig").addEventListener("click", () => saveCurrentSiteConfig(editMode));
+        document.getElementById(`${APP_NAME}-saveBtn`).addEventListener("click", () => {
+            saveCurrentSiteConfig(modal.dataset.editMode === "true");
+        });
 
-        // **绑定恢复默认配置按钮**
         if (hasDefaultConfig) {
-            document.getElementById("resetDefaultConfig").addEventListener("click", () => resetSiteToDefaultConfig(currentHost));
+            document.getElementById(`${APP_NAME}-resetBtn`).addEventListener("click", () => {
+                resetSiteToDefaultConfig(currentHost);
+            });
         }
+
+        document.getElementById(`${APP_NAME}-addRule`).addEventListener("click", () => {
+            addCustomRule("", "");
+        });
     }
 
-    // **保存/修改网站配置**
+    // 动态添加一条自定义规则 (key-value 组)
+    function addCustomRule(selector = "", regex = "") {
+        const container = document.getElementById(`${APP_NAME}-customStatsContainer`);
+
+        const ruleDiv = document.createElement("div");
+        ruleDiv.classList.add(`${APP_NAME}-rule-item`);
+        ruleDiv.innerHTML = `
+        <input type="text" class="${APP_NAME}-rule-key" placeholder="CSS 选择器" value="${selector}">
+        <input type="text" class="${APP_NAME}-rule-value" placeholder="匹配规则 (正则)" value="${regex}">
+        <span class="${APP_NAME}-removeRule">🗑️</span>
+    `;
+
+        ruleDiv.querySelector(`.${APP_NAME}-removeRule`).addEventListener("click", () => {
+            container.removeChild(ruleDiv);
+        });
+
+        container.appendChild(ruleDiv);
+    }
+
+    // 保存/修改网站配置（自动转换 key-value 组）
     function saveCurrentSiteConfig(editMode = false) {
         const currentHost = location.hostname;
-        const primaryDomain = getPrimaryDomain(currentHost); // 获取主域名
-        const siteToSave = editMode && !GM_getValue(STORAGE_KEY, {})[currentHost] ? primaryDomain : currentHost; // **如果子域名无配置，修改主域名配置**
+        const primaryDomain = getPrimaryDomain(currentHost);
+        const siteToSave = editMode && !GM_getValue(APP_NAME, {})[currentHost] ? primaryDomain : currentHost;
 
-        const siteName = document.getElementById("siteName").value.trim();
-        const profileImg = document.getElementById("profileImg").value.trim();
-        const profileUserName = document.getElementById("profileUserName").value.trim();
-        const articleTitle = document.getElementById("articleTitle").value.trim();
-        const profileStatistics = document.getElementById("profileStatistics").value.trim();
-        const customProfileStatistics = document.getElementById("customProfileStatistics").value.trim();
+        const siteName = document.getElementById(`${APP_NAME}-siteName`).value.trim();
+        const profileImg = document.getElementById(`${APP_NAME}-profileImg`).value.trim();
+        const profileUserName = document.getElementById(`${APP_NAME}-profileUserName`).value.trim();
+        const articleTitle = document.getElementById(`${APP_NAME}-articleTitle`).value.trim();
+        const profileStatistics = document.getElementById(`${APP_NAME}-profileStatistics`).value.trim();
 
         if (!siteName) {
             alert("⚠️ 网站名称不能为空！");
             return;
         }
 
-        // **解析 JSON 数据**
-        // 解析 JSON 数据
+        // 采集所有 key-value 规则
         let customStatsParsed = {};
-        try {
-            if (customProfileStatistics) {
-                let tempStats = JSON.parse(customProfileStatistics);
-                for (const [key, value] of Object.entries(tempStats)) {
-                    customStatsParsed[key] = value.toString(); // 直接存字符串
-                }
+        document.querySelectorAll(`.${APP_NAME}-rule-item`).forEach(ruleDiv => {
+            const key = ruleDiv.querySelector(`.${APP_NAME}-rule-key`).value.trim();
+            const value = ruleDiv.querySelector(`.${APP_NAME}-rule-value`).value.trim();
+            if (key && value) {
+                customStatsParsed[key] = value;
             }
-        } catch (error) {
-            alert("❌ 自定义数据格式错误，请输入正确的 JSON 格式！");
-            return;
-        }
+        });
 
-        // **创建新配置**
+        // 创建新配置对象
         let newSiteConfig = {
             "BrowserTitle": siteName,
             ...(profileImg ? { "ProfileImg": profileImg } : {}),
@@ -614,55 +790,80 @@
             ...(Object.keys(customStatsParsed).length ? { "CustomStatistics": customStatsParsed } : {})
         };
 
-        let storedConfig = GM_getValue(STORAGE_KEY, {});
+        let storedConfig = GM_getValue(APP_NAME, {});
         storedConfig[siteToSave] = newSiteConfig;
-        GM_setValue(STORAGE_KEY, storedConfig); // **存储数据**
+        GM_setValue(APP_NAME, storedConfig);
 
-        if (confirm(`✅ ${editMode ? "修改" : "添加"}成功！\n${siteName} (${siteToSave}) 的配置已保存。立即刷新页面即可生效。`)) {
+        if (confirm(`✅ ${siteName} (${siteToSave}) 配置已${editMode ? "修改" : "添加"}！立即刷新页面即可生效。`)) {
             location.reload();
         }
-        document.getElementById("privateViewModal").style.display = "none";
+
+        document.getElementById(`${APP_NAME}-modal`).style.display = "none";
     }
 
     // 移除当前网站配置
     function removeCurrentSiteConfig() {
         const host = location.hostname;
+        if (!confirm(`⚠️ 确定要移除 ${host} 的配置吗？`)) return;
+
+        let storedConfig = GM_getValue(APP_NAME, {});
+
+        // 查找完全匹配当前域名的配置
+        let matchedKey = Object.keys(storedConfig).find(key =>
+            key.split(',').map(k => k.trim()).includes(host)
+        );
+
+        // 获取一级域名（顶级域名 + 二级域名，例如 `mbd.baidu.com` → `baidu.com`）
         let domainParts = host.split('.');
+        let primaryDomain = domainParts.slice(-2).join('.'); // 获取 `baidu.com`
 
-        // **检查是否为子域名，例如 "tieba.baidu.com" -> "baidu.com"**
-        let topLevelDomain = domainParts.length > 2 ? domainParts.slice(-2).join('.') : null;
+        // 查找一级域名的配置
+        let matchedPrimaryKey = Object.keys(storedConfig).find(key =>
+            key.split(',').map(k => k.trim()).includes(primaryDomain)
+        );
 
-        // **加载最新数据**
-        let storedConfig = GM_getValue(STORAGE_KEY, {});
-
-        // **删除当前域名的存储和默认配置**
-        if (storedConfig[host] || DEFAULT_SITE_CONFIG[host]) {
-            if (!confirm(`⚠️ 确定要移除 ${host} 的配置吗？`)) return;
-
-            delete storedConfig[host];
-            delete DEFAULT_SITE_CONFIG[host]; // **同步删除默认配置**
-            GM_setValue(STORAGE_KEY, storedConfig);
-
-            if (confirm(`✅ ${host} 配置已移除！立即刷新页面即可生效。`)) {
-                location.reload();
-            }
+        if (!matchedKey && !matchedPrimaryKey) {
+            alert(`⚠️ ${host} 及其上级域名 ${primaryDomain} 均未找到可删除的配置！`);
             return;
         }
 
-        // **如果当前域名没有匹配，检查顶级域名**
-        if (topLevelDomain && (storedConfig[topLevelDomain] || DEFAULT_SITE_CONFIG[topLevelDomain])) {
-            if (confirm(`⚠️ ${topLevelDomain} 有配置，是否移除？`)) {
-                delete storedConfig[topLevelDomain];
-                delete DEFAULT_SITE_CONFIG[topLevelDomain];
-                GM_setValue(STORAGE_KEY, storedConfig);
+        if (matchedKey) {
+            // 处理当前二级域名的情况
+            let domains = matchedKey.split(',').map(k => k.trim());
+            if (domains.length > 1) {
+                // 只删除当前域名，保留其他域名
+                let newKey = domains.filter(k => k !== host).join(', ');
+                let oldConfig = storedConfig[matchedKey];
+                delete storedConfig[matchedKey]; // 删除旧键
+                storedConfig[newKey] = oldConfig; // 重新存储为新键
+            } else {
+                // 只有单个域名，直接删除
+                delete storedConfig[matchedKey];
+            }
 
-                if (confirm(`✅ ${topLevelDomain} 配置已移除！立即刷新页面即可生效。`)) {
+            GM_setValue(APP_NAME, storedConfig);
+            if (confirm(`✅ ${host} 配置已移除！立即刷新页面即可生效。`)) {
+                location.reload();
+            }
+        } else if (matchedPrimaryKey) {
+            // 如果当前二级域名没有匹配，但一级域名有匹配，询问用户是否删除
+            if (confirm(`⚠️ ${host} 没有找到匹配项，但 ${primaryDomain} 存在配置，是否删除 ${primaryDomain} 的配置？`)) {
+                let domains = matchedPrimaryKey.split(',').map(k => k.trim());
+                if (domains.length > 1) {
+                    // 只删除一级域名，保留其他域名
+                    let newKey = domains.filter(k => k !== primaryDomain).join(', ');
+                    let oldConfig = storedConfig[matchedPrimaryKey];
+                    delete storedConfig[matchedPrimaryKey];
+                    storedConfig[newKey] = oldConfig;
+                } else {
+                    delete storedConfig[matchedPrimaryKey];
+                }
+
+                GM_setValue(APP_NAME, storedConfig);
+                if (confirm(`✅ ${primaryDomain} 配置已移除！立即刷新页面即可生效。`)) {
                     location.reload();
                 }
-                return;
             }
-        } else {
-            alert(`⚠️ ${host} 没有找到可删除的配置！`);
         }
     }
 
@@ -670,62 +871,113 @@
     function resetSiteToDefaultConfig(site) {
         if (!confirm(`⚠️ 确定要恢复 ${site} 的默认配置吗？自定义设置将会被删除！`)) return;
 
-        let storedConfig = GM_getValue(STORAGE_KEY, {});
+        let storedConfig = GM_getValue(APP_NAME, {});
 
-        // **获取主域名**
+        // 获取主域名
         let primaryDomain = getPrimaryDomain(site);
 
-        // **删除所有相关自定义配置（主域名 & 子域名）**
+        // 删除所有相关自定义配置（主域名 & 子域名）
         delete storedConfig[site];
         if (primaryDomain !== site) {
             delete storedConfig[primaryDomain];
         }
 
-        // **检查是否存在默认配置**
+        // 检查是否存在默认配置
         let defaultConfig = DEFAULT_SITE_CONFIG[primaryDomain] || DEFAULT_SITE_CONFIG[site];
 
         if (defaultConfig) {
-            // **如果存在默认配置，强制写入**
+            // 如果存在默认配置，强制写入
             storedConfig[primaryDomain] = defaultConfig;
-            GM_setValue(STORAGE_KEY, storedConfig);
+            GM_setValue(APP_NAME, storedConfig);
             if (confirm(`✅ ${site} 已恢复默认配置！立即刷新页面即可生效。`)) {
                 location.reload();
             }
         } else {
-            // **如果 `DEFAULT_SITE_CONFIG` 也没有值，那就是本身没有默认值**
+            // 如果 `DEFAULT_SITE_CONFIG` 也没有值，那就是本身没有默认值
             alert(`⚠️ ${site} 的自定义配置已删除，但没有默认配置可恢复！`);
         }
     }
 
-    // 恢复默认网站配置
-    function resetToDefaultConfig() {
-        if (!confirm("⚠️ 确定要恢复默认配置吗？所有自定义配置会被清除！")) return;
+    function exportConfig() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(GM_getValue(APP_NAME, {}), null, 4));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", "PrivateView_Config.json");
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        document.body.removeChild(downloadAnchor);
+    }
 
-        GM_setValue(STORAGE_KEY, DEFAULT_SITE_CONFIG);
-        if (confirm(`✅ 已恢复默认网站配置！立即刷新页面即可生效。`)) {
-            location.reload();
+    function importConfig(event) {
+        if (confirm(`⚠️ 导入配置，将会覆盖当前已有配置，是否继续？`)) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const importedConfig = JSON.parse(e.target.result);
+                    GM_setValue(APP_NAME, importedConfig);
+                    if (confirm(`✅ 配置已成功导入！立即刷新页面即可生效。`)) {
+                        location.reload();
+                    }
+                } catch (error) {
+                    alert("配置文件格式错误，请检查后再试！");
+                }
+            };
+            reader.readAsText(file);
         }
     }
 
-    // 查看所有网站配置
-    function viewAllSiteConfigs() {
-        const storedConfig = GM_getValue(STORAGE_KEY, {});
-        const allConfigs = JSON.stringify(storedConfig, null, 4);
+    function saveConfig() {
+        const newConfig = document.getElementById("configTextarea").value;
+        try {
+            const parsedConfig = JSON.parse(newConfig);
+            GM_setValue(APP_NAME, parsedConfig);
+            if (confirm(`✅ 配置已保存！立即刷新页面即可生效。`)) {
+                location.reload();
+            }
+        } catch (error) {
+            alert("配置格式错误，请检查后再试！");
+        }
+    }
 
-        const newWindow = window.open("", "_blank");
-        newWindow.document.write(`
-            <html>
-            <head>
-                <title>所有网站配置</title>
-                <style> body { font-family: monospace; white-space: pre-wrap; } </style>
-            </head>
-            <body>
-                <h2>📜 所有网站配置</h2>
-                <pre>${allConfigs}</pre>
-            </body>
-            </html>
-        `);
-        newWindow.document.close();
+    function showConfigEditor() {
+        let modal = document.getElementById("configModal");
+        if (modal) {
+            modal.style.display = "block";
+            return;
+        }
+
+        modal = document.createElement("div");
+        modal.id = "configModal";
+        modal.style.position = "fixed";
+        modal.style.top = "50%";
+        modal.style.left = "50%";
+        modal.style.transform = "translate(-50%, -50%)";
+        modal.style.background = "white";
+        modal.style.padding = "20px";
+        modal.style.boxShadow = "0px 0px 10px rgba(0, 0, 0, 0.5)";
+        modal.style.borderRadius = "10px";
+        modal.style.width = "800px";
+        modal.style.zIndex = "9999";
+
+        modal.innerHTML = `
+            <h3>📜 网站配置</h3>
+            <textarea id="configTextarea" rows="50" style="width:100%; font-family:monospace;">${JSON.stringify(GM_getValue(APP_NAME, {}), null, 4)}</textarea>
+            <br><br>
+            <input type="file" id="importFile" accept=".json" style="display:none;">
+            <button id="importBtn">📥 导入配置</button>
+            <button id="exportBtn">📤 导出配置</button>
+            <button id="saveBtn">💾 保存配置</button>
+            <button onclick="document.getElementById('configModal').style.display = 'none';">❌ 关闭</button>
+        `;
+        document.body.appendChild(modal);
+
+        document.getElementById("importFile").addEventListener("change", importConfig);
+        document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
+        document.getElementById("exportBtn").addEventListener("click", exportConfig);
+        document.getElementById("saveBtn").addEventListener("click", saveConfig);
     }
 
     // 存储菜单项的引用
@@ -768,7 +1020,7 @@
             );
 
             menuItems.hideAllImg = GM_registerMenuCommand(
-                settings.hideAllImg ? "🧩屏蔽所有图片✅" : "🧩屏蔽所有图片❌",
+                settings.hideAllImg ? "🎞️屏蔽所有视图✅" : "🎞️屏蔽所有视图❌",
                 () => toggleSetting('hideAllImg')
             );
 
@@ -777,24 +1029,19 @@
                 () => showModal(true)
             );
 
-            menuItems.viewAllConfigs = GM_registerMenuCommand(
-                `📜查看所有网站配置`,
-                () => viewAllSiteConfigs()
-            );
-
             menuItems.removeCurrentSite = GM_registerMenuCommand(
                 `🗑️移除当前网站配置`,
                 () => removeCurrentSiteConfig()
             );
 
-            menuItems.resetDefaultConfig = GM_registerMenuCommand(
-                `🔄恢复所有网站配置`,
-                () => resetToDefaultConfig()
+            menuItems.manageAllConfigs = GM_registerMenuCommand(
+                `⚙️管理所有网站配置`,
+                () => showConfigEditor()
             );
 
             menuItems.resetDefaultConfig = GM_registerMenuCommand(
                 `🏠关于PrivateView`,
-                () => window.open('https://github.com/10D24D/PrivateView/')
+                () => window.open('https://greasyfork.org/zh-CN/scripts/520416-privateview')
             );
 
         } else {
@@ -810,14 +1057,9 @@
                 () => showModal(false)
             );
 
-            menuItems.viewAllConfigs = GM_registerMenuCommand(
-                `📜查看所有网站配置`,
-                () => viewAllSiteConfigs()
-            );
-
-            menuItems.resetDefaultConfig = GM_registerMenuCommand(
-                `🔄恢复所有网站配置`,
-                () => resetToDefaultConfig()
+            menuItems.manageAllConfigs = GM_registerMenuCommand(
+                `⚙️管理所有网站配置`,
+                () => showConfigEditor()
             );
 
             return; // 不注册其他菜单项
@@ -844,5 +1086,4 @@
             hideElements();
         }, 100);
     }
-
 })();
